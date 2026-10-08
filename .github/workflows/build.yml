@@ -69,7 +69,8 @@ jobs:
             
             # 7. Apply run permissions and fire up the compilation engine!
             chmod +x ./profiledef.sh
-            mkarchiso -v -w /tmp/archiso-work -o /workspace/output .
+            mkdir -p ./output
+            mkarchiso -v -w /tmp/archiso-work -o ./output .
           "
 
       - name: Upload Bootable ISO
