@@ -4,16 +4,49 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
+    # This instructs GitHub to boot directly into an official Arch Linux machine
+    container:
+      image: archlinux:latest
+      options: --privileged
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Generate Bootloader Configurations Locally
+      - name: Configure and Compile Custom Arch Linux ISO
         run: |
-          # 1. Force the physical output directory to exist on the host machine
-          mkdir -p syslinux grub output
+          # 1. Update keys and bypass container sandboxing privilege limits
+          echo 'DisableSandbox' >> /etc/pacman.conf
+          pacman-key --init
+          pacman-key --populate archlinux
           
-          # 2. Generate the local GRUB bootloader configuration sheet with the emergency mode bypass
+          # 2. Re-route package downloads to the Cloudflare content mirror network
+          mkdir -p pacman.d syslinux grub output
+          echo 'Server = https://cloudflaremirror.com' > /etc/pacman.d/mirrorlist
+          
+          # 3. Synchronize signature libraries and install building hooks natively
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Syu --noconfirm archiso squashfs-tools xorriso grub syslinux efibootmgr
+
+          # 4. Generate local pacman config to match the build profile
+          cat << 'EOF' > ./pacman.conf
+          [options]
+          HoldPkg     = pacman glibc
+          Architecture = auto
+          Color
+          CheckSpace
+          ParallelDownloads = 5
+          SigLevel    = Required DatabaseOptional
+          LocalFileSigLevel = Optional
+          DisableSandbox
+
+          [core]
+          Include = pacman.d/mirrorlist
+
+          [extra]
+          Include = pacman.d/mirrorlist
+          EOF
+
+          # 5. Populate standard boot configuration layouts with the emergency mode bypass
           echo 'insmod part_gpt' > grub/grub.cfg
           echo 'insmod part_msdos' >> grub/grub.cfg
           echo 'insmod fat' >> grub/grub.cfg
@@ -26,7 +59,6 @@ jobs:
           echo '    initrd /arch/boot/x86_64/initramfs-linux.img' >> grub/grub.cfg
           echo '}' >> grub/grub.cfg
 
-          # 3. Generate legacy Syslinux BIOS bootloader configurations
           echo 'DEFAULT yu_os' > syslinux/syslinux.cfg
           echo 'TIMEOUT 50' >> syslinux/syslinux.cfg
           echo 'PROMPT 0' >> syslinux/syslinux.cfg
@@ -36,48 +68,9 @@ jobs:
           echo 'INITRD /arch/boot/x86_64/initramfs-linux.img' >> syslinux/syslinux.cfg
           echo 'APPEND archisobasedir=arch archisolabel=YU_OS_202610 systemd.debug-shell=1' >> syslinux/syslinux.cfg
           
+          # 6. Apply profile permission settings and compile the ISO file!
           chmod +x ./profiledef.sh
-
-      - name: Run ArchISO Compiler inside Container
-        run: |
-          docker run --privileged --rm -v ${{ github.workspace }}:/workspace -w /workspace archlinux:latest bash -c "
-            # 1. Nuke the container mirrorlist and inject Cloudflare directly
-            mkdir -p /etc/pacman.d
-            echo 'Server = https://cloudflaremirror.com\$repo/os/\$arch' > /etc/pacman.d/mirrorlist
-            
-            # 2. Fix sandbox barrier and sync with Cloudflare mirrors
-            echo 'DisableSandbox' >> /etc/pacman.conf
-            pacman-key --init
-            pacman-key --populate archlinux
-            pacman -Sy --noconfirm archlinux-keyring
-            pacman -Syu --noconfirm archiso squashfs-tools xorriso grub syslinux efibootmgr
-            
-            # 3. Force the local build profile mirrorlist to use Cloudflare too
-            mkdir -p pacman.d
-            echo 'Server = https://cloudflaremirror.com\$repo/os/\$arch' > pacman.d/mirrorlist
-            
-            # 4. Generate local pacman config to match
-            cat << 'EOF' > ./pacman.conf
-            [options]
-            HoldPkg     = pacman glibc
-            Architecture = auto
-            Color
-            CheckSpace
-            ParallelDownloads = 5
-            SigLevel    = Required DatabaseOptional
-            LocalFileSigLevel = Optional
-            DisableSandbox
-
-            [core]
-            Include = pacman.d/mirrorlist
-
-            [extra]
-            Include = pacman.d/mirrorlist
-            EOF
-            
-            # 5. Fire up the compiler engine targeting the shared output volume
-            mkarchiso -v -w /tmp/archiso-work -o /workspace/output .
-          "
+          mkarchiso -v -w /tmp/archiso-work -o ./output .
 
       - name: Upload Bootable ISO
         uses: actions/upload-artifact@v4
