@@ -13,7 +13,7 @@ jobs:
           # 1. Setup baseline mirror and boot configuration folders
           mkdir -p pacman.d syslinux grub output
           
-          # 2. Write the clean pacman configuration mapping
+          # 2. Write the clean pacman configuration mapping targeting geo.mirror
           cat << 'EOF' > ./pacman.conf
           [options]
           HoldPkg     = pacman glibc
