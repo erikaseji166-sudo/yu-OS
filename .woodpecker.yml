@@ -1,0 +1,13 @@
+# .woodpecker.yml
+pipeline:
+  build_yu_os:
+    image: archlinux:latest
+    commands:
+      # 1. Update the cloud container and install the Arch Linux OS builders
+      - pacman -Syu --noconfirm archiso squashfs-tools xorriso
+
+      # 2. Make sure the master build profile script is executable
+      - chmod +x ./profiledef.sh
+
+      # 3. Compile everything into a bootable .ISO file!
+      - mkarchiso -v -w ./work_dir -o ./output_dir .
