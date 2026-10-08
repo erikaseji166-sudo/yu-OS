@@ -11,19 +11,25 @@ jobs:
       - name: Run ArchISO inside Docker
         run: |
           docker run --privileged --rm -v ${{ github.workspace }}:/workspace -w /workspace archlinux:latest bash -c "
-            # 1. Initialize security keys and install core compilers
+            # 1. Bypass container sandboxing errors by forcing DisableSandbox globally
+            mkdir -p /etc/pacman.d
+            echo 'DisableSandbox' >> /etc/pacman.conf
+            echo 'DisableSandbox' >> ./pacman.conf
+            
+            # 2. Update repository keys and synchronize core package metrics
             pacman-key --init
             pacman-key --populate archlinux
+            pacman -Sy --noconfirm archlinux-keyring
             pacman -Syu --noconfirm archiso squashfs-tools xorriso grub syslinux efibootmgr
             
-            # 2. Setup the official worldwide fallback mirror map
+            # 3. Setup fallback mirror maps for clean container downloading
             mkdir -p pacman.d
             echo 'Server = https://pkgbuild.com\$repo/os/\$arch' > pacman.d/mirrorlist
             
-            # 3. Build required configuration folders dynamically
+            # 4. Generate necessary verification directories dynamically
             mkdir -p syslinux grub
             
-            # 4. Generate the base GRUB bootloader rule sheet
+            # 5. Populate standard boot configuration layouts
             echo 'insmod part_gpt' > grub/grub.cfg
             echo 'insmod part_msdos' >> grub/grub.cfg
             echo 'insmod fat' >> grub/grub.cfg
@@ -36,7 +42,6 @@ jobs:
             echo '    initrd /arch/boot/x86_64/initramfs-linux.img' >> grub/grub.cfg
             echo '}' >> grub/grub.cfg
 
-            # 5. Generate the base Syslinux BIOS bootloader configurations
             echo 'DEFAULT yu_os' > syslinux/syslinux.cfg
             echo 'TIMEOUT 50' >> syslinux/syslinux.cfg
             echo 'PROMPT 0' >> syslinux/syslinux.cfg
@@ -46,10 +51,8 @@ jobs:
             echo 'INITRD /arch/boot/x86_64/initramfs-linux.img' >> syslinux/syslinux.cfg
             echo 'APPEND archisobasedir=arch archisolabel=YU_OS_202610' >> syslinux/syslinux.cfg
             
-            # 6. Set active execution permissions on the profile dictionary
+            # 6. Execute compilation parameters to output the ISO image
             chmod +x ./profiledef.sh
-            
-            # 7. Fire up the master compiler engine to create the ISO!
             mkarchiso -v -w /tmp/archiso-work -o /workspace/output .
           "
 
