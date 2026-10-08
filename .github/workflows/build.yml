@@ -4,29 +4,33 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: archlinux:latest
-      options: --privileged
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Compile Custom Arch Linux ISO
+      - name: Run ArchISO inside Docker
         run: |
-          pacman-key --init
-          pacman-key --populate archlinux
-          pacman -Syu --noconfirm archiso squashfs-tools xorriso
-          
-          # Setup baseline mirror directory structures
-          mkdir -p pacman.d
-          echo "Server = https://pkgbuild.com\$repo/os/\$arch" > pacman.d/mirrorlist
-          
-          # Compile the system directly inside the root workspace folder
-          chmod +x ./profiledef.sh
-          mkarchiso -v -w /tmp/archiso-work -o ./out .
+          docker run --privileged --rm -v ${{ github.workspace }}:/workspace -w /workspace archlinux:latest bash -c "
+            # 1. Initialize keys and install core packages inside the builder
+            pacman-key --init
+            pacman-key --populate archlinux
+            pacman -Syu --noconfirm archiso squashfs-tools xorriso grub syslinux efibootmgr
+            
+            # 2. Automatically create the empty configuration directories that mkarchiso expects
+            mkdir -p syslinux grub pacman.d
+            
+            # 3. Setup the download servers map
+            echo 'Server = https://pkgbuild.com\$repo/os/\$arch' > pacman.d/mirrorlist
+            
+            # 4. Make sure your profile script is runnable
+            chmod +x ./profiledef.sh
+            
+            # 5. Compile everything into a bootable ISO file
+            mkarchiso -v -w /tmp/archiso-work -o /workspace/output .
+          "
 
       - name: Upload Bootable ISO
         uses: actions/upload-artifact@v4
         with:
           name: Yu-OS-Bootable-ISO
-          path: out/*.iso
+          path: output/*.iso
