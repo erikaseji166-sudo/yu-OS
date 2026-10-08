@@ -8,35 +8,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Generate Configuration Files Locally
+      - name: Generate Bootloader Configurations Locally
         run: |
-          # 1. Setup baseline mirror and boot configuration folders
-          mkdir -p pacman.d syslinux grub output
+          # 1. Setup bootloader layout directories
+          mkdir -p syslinux grub output
           
-          # 2. Write the clean pacman configuration mapping targeting geo.mirror
-          cat << 'EOF' > ./pacman.conf
-          [options]
-          HoldPkg     = pacman glibc
-          Architecture = auto
-          Color
-          CheckSpace
-          ParallelDownloads = 5
-          SigLevel    = Required DatabaseOptional
-          LocalFileSigLevel = Optional
-
-          [core]
-          Server = https://pkgbuild.com
-
-          [extra]
-          Server = https://pkgbuild.com
-          EOF
-          
-          # 3. Populate mirror mapping paths matching the config rules
-          cat << 'EOF' > pacman.d/mirrorlist
-          Server = https://pkgbuild.com
-          EOF
-          
-          # 4. Generate fallback bootloader configuration files with the debug shell override
+          # 2. Generate fallback GRUB bootloader configuration files with the debug shell override
           echo 'insmod part_gpt' > grub/grub.cfg
           echo 'insmod part_msdos' >> grub/grub.cfg
           echo 'insmod fat' >> grub/grub.cfg
@@ -49,6 +26,7 @@ jobs:
           echo '    initrd /arch/boot/x86_64/initramfs-linux.img' >> grub/grub.cfg
           echo '}' >> grub/grub.cfg
 
+          # 3. Generate fallback Syslinux BIOS bootloader configurations
           echo 'DEFAULT yu_os' > syslinux/syslinux.cfg
           echo 'TIMEOUT 50' >> syslinux/syslinux.cfg
           echo 'PROMPT 0' >> syslinux/syslinux.cfg
@@ -63,16 +41,16 @@ jobs:
       - name: Run ArchISO Compiler inside Container
         run: |
           docker run --privileged --rm -v ${{ github.workspace }}:/workspace -w /workspace archlinux:latest bash -c "
-            # Disable sandboxing privilege drop errors
+            # 1. Disable container sandboxing privilege drops
             echo 'DisableSandbox' >> /etc/pacman.conf
             
-            # Sync container signature keys and install building framework
+            # 2. Sync container verification definitions and install framework
             pacman-key --init
             pacman-key --populate archlinux
             pacman -Sy --noconfirm archlinux-keyring
             pacman -Syu --noconfirm archiso squashfs-tools xorriso grub syslinux efibootmgr
             
-            # Fire up the compilation engine to create the ISO!
+            # 3. Fire up the compiler using the untouched internal system mirror defaults
             mkarchiso -v -w /tmp/archiso-work -o /workspace/output .
           "
 
