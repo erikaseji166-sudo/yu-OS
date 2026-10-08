@@ -10,10 +10,10 @@ jobs:
 
       - name: Generate Bootloader Configurations Locally
         run: |
-          # 1. Setup bootloader layout directories
+          # 1. Setup bootloader configuration directory structures
           mkdir -p syslinux grub output
           
-          # 2. Generate fallback GRUB bootloader configuration files with the debug shell override
+          # 2. Generate the local GRUB bootloader configuration sheet with the emergency mode bypass
           echo 'insmod part_gpt' > grub/grub.cfg
           echo 'insmod part_msdos' >> grub/grub.cfg
           echo 'insmod fat' >> grub/grub.cfg
@@ -26,7 +26,7 @@ jobs:
           echo '    initrd /arch/boot/x86_64/initramfs-linux.img' >> grub/grub.cfg
           echo '}' >> grub/grub.cfg
 
-          # 3. Generate fallback Syslinux BIOS bootloader configurations
+          # 3. Generate legacy Syslinux BIOS bootloader configurations
           echo 'DEFAULT yu_os' > syslinux/syslinux.cfg
           echo 'TIMEOUT 50' >> syslinux/syslinux.cfg
           echo 'PROMPT 0' >> syslinux/syslinux.cfg
@@ -41,16 +41,25 @@ jobs:
       - name: Run ArchISO Compiler inside Container
         run: |
           docker run --privileged --rm -v ${{ github.workspace }}:/workspace -w /workspace archlinux:latest bash -c "
-            # 1. Disable container sandboxing privilege drops
+            # 1. Force the container's master configuration to disable sandboxing
             echo 'DisableSandbox' >> /etc/pacman.conf
             
-            # 2. Sync container verification definitions and install framework
+            # 2. OVERWRITE internal host mirrors with rock-solid, direct global mirror paths
+            echo '[core]' > /etc/pacman.conf
+            echo 'Server = https://pkgbuild.com' >> /etc/pacman.conf
+            echo '[extra]' >> /etc/pacman.conf
+            echo 'Server = https://pkgbuild.com' >> /etc/pacman.conf
+            
+            # 3. Synchronize signature libraries and install building hooks
             pacman-key --init
             pacman-key --populate archlinux
             pacman -Sy --noconfirm archlinux-keyring
             pacman -Syu --noconfirm archiso squashfs-tools xorriso grub syslinux efibootmgr
             
-            # 3. Fire up the compiler using the untouched internal system mirror defaults
+            # 4. ALSO overwrite the builder's profile pacman.conf to lock in the direct servers
+            cp /etc/pacman.conf ./pacman.conf
+            
+            # 5. Compile everything into a bootable ISO!
             mkarchiso -v -w /tmp/archiso-work -o /workspace/output .
           "
 
