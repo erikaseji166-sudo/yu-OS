@@ -10,7 +10,7 @@ jobs:
 
       - name: Generate Bootloader Configurations Locally
         run: |
-          # 1. Setup bootloader configuration directory structures
+          # 1. Force the physical output directory to exist on the host machine
           mkdir -p syslinux grub output
           
           # 2. Generate the local GRUB bootloader configuration sheet with the emergency mode bypass
@@ -75,7 +75,7 @@ jobs:
             Include = pacman.d/mirrorlist
             EOF
             
-            # 5. Fire up the compiler!
+            # 5. Fire up the compiler engine targeting the shared output volume
             mkarchiso -v -w /tmp/archiso-work -o /workspace/output .
           "
 
