@@ -41,25 +41,41 @@ jobs:
       - name: Run ArchISO Compiler inside Container
         run: |
           docker run --privileged --rm -v ${{ github.workspace }}:/workspace -w /workspace archlinux:latest bash -c "
-            # 1. Force the container's master configuration to disable sandboxing
+            # 1. Nuke the container mirrorlist and inject Cloudflare directly
+            mkdir -p /etc/pacman.d
+            echo 'Server = https://cloudflaremirror.com\$repo/os/\$arch' > /etc/pacman.d/mirrorlist
+            
+            # 2. Fix sandbox barrier and sync with Cloudflare mirrors
             echo 'DisableSandbox' >> /etc/pacman.conf
-            
-            # 2. OVERWRITE internal host mirrors with rock-solid, direct global mirror paths
-            echo '[core]' > /etc/pacman.conf
-            echo 'Server = https://pkgbuild.com' >> /etc/pacman.conf
-            echo '[extra]' >> /etc/pacman.conf
-            echo 'Server = https://pkgbuild.com' >> /etc/pacman.conf
-            
-            # 3. Synchronize signature libraries and install building hooks
             pacman-key --init
             pacman-key --populate archlinux
             pacman -Sy --noconfirm archlinux-keyring
             pacman -Syu --noconfirm archiso squashfs-tools xorriso grub syslinux efibootmgr
             
-            # 4. ALSO overwrite the builder's profile pacman.conf to lock in the direct servers
-            cp /etc/pacman.conf ./pacman.conf
+            # 3. Force the local build profile mirrorlist to use Cloudflare too
+            mkdir -p pacman.d
+            echo 'Server = https://cloudflaremirror.com\$repo/os/\$arch' > pacman.d/mirrorlist
             
-            # 5. Compile everything into a bootable ISO!
+            # 4. Generate local pacman config to match
+            cat << 'EOF' > ./pacman.conf
+            [options]
+            HoldPkg     = pacman glibc
+            Architecture = auto
+            Color
+            CheckSpace
+            ParallelDownloads = 5
+            SigLevel    = Required DatabaseOptional
+            LocalFileSigLevel = Optional
+            DisableSandbox
+
+            [core]
+            Include = pacman.d/mirrorlist
+
+            [extra]
+            Include = pacman.d/mirrorlist
+            EOF
+            
+            # 5. Fire up the compiler!
             mkarchiso -v -w /tmp/archiso-work -o /workspace/output .
           "
 
