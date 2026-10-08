@@ -8,69 +8,70 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Run ArchISO inside Docker
+      - name: Generate Configuration Files Locally
+        run: |
+          # 1. Setup baseline mirror and boot configuration folders
+          mkdir -p pacman.d syslinux grub output
+          
+          # 2. Write the clean pacman configuration mapping
+          cat << 'EOF' > ./pacman.conf
+          [options]
+          HoldPkg     = pacman glibc
+          Architecture = auto
+          Color
+          CheckSpace
+          ParallelDownloads = 5
+          SigLevel    = Required DatabaseOptional
+          LocalFileSigLevel = Optional
+
+          [core]
+          Server = https://pkgbuild.com
+
+          [extra]
+          Server = https://pkgbuild.com
+          EOF
+          
+          # 3. Populate mirror mapping paths matching the config rules
+          echo 'Server = https://pkgbuild.com' > pacman.d/mirrorlist
+          
+          # 4. Generate fallback bootloader configuration files
+          echo 'insmod part_gpt' > grub/grub.cfg
+          echo 'insmod part_msdos' >> grub/grub.cfg
+          echo 'insmod fat' >> grub/grub.cfg
+          echo 'insmod iso9660' >> grub/grub.cfg
+          echo 'set timeout=5' >> grub/grub.cfg
+          echo 'set default=0' >> grub/grub.cfg
+          echo 'menuentry "Yu-OS Live Environment" {' >> grub/grub.cfg
+          echo '    search --no-floppy --set=root --label YU_OS_202610' >> grub/grub.cfg
+          echo '    linux /arch/boot/x86_64/vmlinuz-linux archisobasedir=arch archisolabel=YU_OS_202610' >> grub/grub.cfg
+          echo '    initrd /arch/boot/x86_64/initramfs-linux.img' >> grub/grub.cfg
+          echo '}' >> grub/grub.cfg
+
+          echo 'DEFAULT yu_os' > syslinux/syslinux.cfg
+          echo 'TIMEOUT 50' >> syslinux/syslinux.cfg
+          echo 'PROMPT 0' >> syslinux/syslinux.cfg
+          echo 'LABEL yu_os' >> syslinux/syslinux.cfg
+          echo 'MENU LABEL Yu-OS Live Environment' >> syslinux/syslinux.cfg
+          echo 'LINUX /arch/boot/x86_64/vmlinuz-linux' >> syslinux/syslinux.cfg
+          echo 'INITRD /arch/boot/x86_64/initramfs-linux.img' >> syslinux/syslinux.cfg
+          echo 'APPEND archisobasedir=arch archisolabel=YU_OS_202610' >> syslinux/syslinux.cfg
+          
+          chmod +x ./profiledef.sh
+
+      - name: Run ArchISO Compiler inside Container
         run: |
           docker run --privileged --rm -v ${{ github.workspace }}:/workspace -w /workspace archlinux:latest bash -c "
-            # 1. Update system databases and bypass default sandboxing barriers
-            mkdir -p /etc/pacman.d
+            # Disable sandboxing privilege drop errors
             echo 'DisableSandbox' >> /etc/pacman.conf
             
-            # 2. Build our isolated package configuration layouts
-            mkdir -p pacman.d syslinux grub
-            
-            # 3. Securely write the master pacman.conf repository list
-            cat << 'EOF' > ./pacman.conf
-            [options]
-            HoldPkg     = pacman glibc
-            Architecture = auto
-            Color
-            CheckSpace
-            ParallelDownloads = 5
-            SigLevel    = Required DatabaseOptional
-            LocalFileSigLevel = Optional
-
-            [core]
-            Server = https://pkgbuild.com\$repo/os/\$arch
-
-            [extra]
-            Server = https://pkgbuild.com\$repo/os/\$arch
-            EOF
-            
-            # 4. Populate mirror mapping paths matching the config rules
-            echo 'Server = https://pkgbuild.com\$repo/os/\$arch' > pacman.d/mirrorlist
-            
-            # 5. Initialize secure signature authorization definitions
+            # Sync container signature keys and install building framework
             pacman-key --init
             pacman-key --populate archlinux
             pacman -Sy --noconfirm archlinux-keyring
             pacman -Syu --noconfirm archiso squashfs-tools xorriso grub syslinux efibootmgr
             
-            # 6. Generate fallback bootloader files on the fly
-            echo 'insmod part_gpt' > grub/grub.cfg
-            echo 'insmod part_msdos' >> grub/grub.cfg
-            echo 'insmod fat' >> grub/grub.cfg
-            echo 'insmod iso9660' >> grub/grub.cfg
-            echo 'set timeout=5' >> grub/grub.cfg
-            echo 'set default=0' >> grub/grub.cfg
-            echo 'menuentry \"Yu-OS Live Environment\" {' >> grub/grub.cfg
-            echo '    search --no-floppy --set=root --label YU_OS_202610' >> grub/grub.cfg
-            echo '    linux /arch/boot/x86_64/vmlinuz-linux archisobasedir=arch archisolabel=YU_OS_202610' >> grub/grub.cfg
-            echo '    initrd /arch/boot/x86_64/initramfs-linux.img' >> grub/grub.cfg
-            echo '}' >> grub/grub.cfg
-
-            echo 'DEFAULT yu_os' > syslinux/syslinux.cfg
-            echo 'TIMEOUT 50' >> syslinux/syslinux.cfg
-            echo 'PROMPT 0' >> syslinux/syslinux.cfg
-            echo 'LABEL yu_os' >> syslinux/syslinux.cfg
-            echo 'MENU LABEL Yu-OS Live Environment' >> syslinux/syslinux.cfg
-            echo 'LINUX /arch/boot/x86_64/vmlinuz-linux' >> syslinux/syslinux.cfg
-            echo 'INITRD /arch/boot/x86_64/initramfs-linux.img' >> syslinux/syslinux.cfg
-            echo 'APPEND archisobasedir=arch archisolabel=YU_OS_202610' >> syslinux/syslinux.cfg
-            
-            # 7. Apply run permissions and fire up the compilation engine!
-            chmod +x ./profiledef.sh
-            mkdir -p ./output
-            mkarchiso -v -w /tmp/archiso-work -o ./output .
+            # Fire up the compilation engine to create the ISO!
+            mkarchiso -v -w /tmp/archiso-work -o /workspace/output .
           "
 
       - name: Upload Bootable ISO
