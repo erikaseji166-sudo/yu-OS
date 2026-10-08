@@ -5,3 +5,7 @@ networkmanager
 sudo
 nano
 neofetch
+grub
+syslinux
+efibootmgr
+memtest86+
