@@ -11,21 +11,52 @@ jobs:
       - name: Run ArchISO inside Docker
         run: |
           docker run --privileged --rm -v ${{ github.workspace }}:/workspace -w /workspace archlinux:latest bash -c "
-            # 1. Initialize keys and install core packages inside the builder
+            # 1. Initialize security keys and install core compilers
             pacman-key --init
             pacman-key --populate archlinux
             pacman -Syu --noconfirm archiso squashfs-tools xorriso grub syslinux efibootmgr
             
-            # 2. Automatically create the empty configuration directories that mkarchiso expects
-            mkdir -p syslinux grub pacman.d
-            
-            # 3. Setup the download servers map
+            # 2. Setup the official worldwide fallback mirror map
+            mkdir -p pacman.d
             echo 'Server = https://pkgbuild.com\$repo/os/\$arch' > pacman.d/mirrorlist
             
-            # 4. Make sure your profile script is runnable
+            # 3. Build required configuration folders dynamically
+            mkdir -p syslinux grub
+            
+            # 4. Generate the base GRUB bootloader rule sheet
+            cat <<'EOF' > grub/grub.cfg
+            insmod part_gpt
+            insmod part_msdos
+            insmod fat
+            insmod iso9660
+
+            set timeout=5
+            set default=0
+
+            menuentry "Yu-OS Live Environment (x86_64)" {
+                search --no-floppy --set=root --label YU_OS_202610
+                linux /arch/boot/x86_64/vmlinuz-linux archisobasedir=arch archisolabel=YU_OS_202610
+                initrd /arch/boot/x86_64/initramfs-linux.img
+            }
+          EOF
+
+            # 5. Generate the base Syslinux BIOS bootloader configurations
+            cat <<'EOF' > syslinux/syslinux.cfg
+            DEFAULT yu_os
+            TIMEOUT 50
+            PROMPT 0
+
+            LABEL yu_os
+            MENU LABEL Yu-OS Live Environment (x86_64)
+            LINUX /arch/boot/x86_64/vmlinuz-linux
+            INITRD /arch/boot/x86_64/initramfs-linux.img
+            APPEND archisobasedir=arch archisolabel=YU_OS_202610
+          EOF
+            
+            # 6. Set active execution permissions on the profile dictionary
             chmod +x ./profiledef.sh
             
-            # 5. Compile everything into a bootable ISO file
+            # 7. Fire up the master compiler engine to create the ISO!
             mkarchiso -v -w /tmp/archiso-work -o /workspace/output .
           "
 
