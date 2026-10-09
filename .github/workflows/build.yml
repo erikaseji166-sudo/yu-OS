@@ -4,7 +4,6 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
-    # This instructs GitHub to boot directly into an official Arch Linux machine
     container:
       image: archlinux:latest
       options: --privileged
@@ -19,9 +18,9 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           
-          # 2. Re-route package downloads to the Cloudflare content mirror network
+          # 2. Re-route package downloads to the independent global Leaseweb mirror network
           mkdir -p pacman.d syslinux grub output
-          echo 'Server = https://cloudflaremirror.com' > /etc/pacman.d/mirrorlist
+          echo 'Server = https://leaseweb.net' > /etc/pacman.d/mirrorlist
           
           # 3. Synchronize signature libraries and install building hooks natively
           pacman -Sy --noconfirm archlinux-keyring
