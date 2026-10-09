@@ -18,18 +18,21 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           
-          # 2. Re-route package downloads to the independent global Leaseweb mirror network
+          # 2. Generate clean baseline network mirrors and output layouts
           mkdir -p pacman.d syslinux grub output
-          echo 'Server = https://leaseweb.net' > /etc/pacman.d/mirrorlist
           
-          # 3. Synchronize signature libraries and install building hooks natively
+          # 3. Use Arch's official global CDN mirror redirector
+          echo "Server = https://geo.mirror.pkgbuild.com/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist
+          cp /etc/pacman.d/mirrorlist ./pacman.d/mirrorlist
+
+          # 4. Synchronize signature libraries and install building hooks natively
           pacman -Sy --noconfirm archlinux-keyring
           pacman -Syu --noconfirm archiso squashfs-tools xorriso grub syslinux efibootmgr
 
-          # 4. Generate local pacman config to match the build profile
+          # 5. Generate local pacman config to match the build profile exactly
           cat << 'EOF' > ./pacman.conf
           [options]
-          HoldPkg     = pacman glibc
+          HoldPkg      = pacman glibc
           Architecture = auto
           Color
           CheckSpace
@@ -39,13 +42,13 @@ jobs:
           DisableSandbox
 
           [core]
-          Include = pacman.d/mirrorlist
+          Include = /etc/pacman.d/mirrorlist
 
           [extra]
-          Include = pacman.d/mirrorlist
+          Include = /etc/pacman.d/mirrorlist
           EOF
 
-          # 5. Populate standard boot configuration layouts with the emergency mode bypass
+          # 6. Populate standard boot configuration layouts with the emergency mode bypass
           echo 'insmod part_gpt' > grub/grub.cfg
           echo 'insmod part_msdos' >> grub/grub.cfg
           echo 'insmod fat' >> grub/grub.cfg
@@ -67,7 +70,7 @@ jobs:
           echo 'INITRD /arch/boot/x86_64/initramfs-linux.img' >> syslinux/syslinux.cfg
           echo 'APPEND archisobasedir=arch archisolabel=YU_OS_202610 systemd.debug-shell=1' >> syslinux/syslinux.cfg
           
-          # 6. Apply profile permission settings and compile the ISO file!
+          # 7. Apply profile permission settings and compile the ISO file!
           chmod +x ./profiledef.sh
           mkarchiso -v -w /tmp/archiso-work -o ./output .
 
