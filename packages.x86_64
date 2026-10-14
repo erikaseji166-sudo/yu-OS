@@ -9,3 +9,5 @@ grub
 syslinux
 efibootmgr
 memtest86+
+mkinitcpio
+mkinitcpio-archiso
