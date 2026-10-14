@@ -10,3 +10,4 @@ buildmodes=('iso')
 bootmodes=('bios.syslinux' 'uefi.grub')
 arch="x86_64"
 pacman_conf="pacman.conf"
+file_permissions=(["/etc/shadow"]="0:0:400")
