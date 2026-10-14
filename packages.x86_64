@@ -11,3 +11,7 @@ efibootmgr
 memtest86+
 mkinitcpio
 mkinitcpio-archiso
+plasma-desktop
+konsole
+dolphin
+virtualbox-guest-utils
